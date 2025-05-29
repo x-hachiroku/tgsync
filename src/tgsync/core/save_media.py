@@ -18,27 +18,34 @@ class ProgressSummary:
     def __init__(self):
         self.report_time = time()
         self.tasks = [{
-            'seq': i,
+            'chat_msg_id': None,
+            'media_id': None,
             'name': None,
             'total': 0,
-            'speed': 0,
             'received': 0,
-            'last_report': 0,
-        } for i in range(config['download']['concurrent'])]
+            'start_time': 0,
+            'speed': 0,
+        } for _ in range(config['download']['concurrent'])]
 
-    def init_task(self, seq, name, total):
-        self.tasks[seq]['name'] = name
-        self.tasks[seq]['total'] = total
-        self.tasks[seq]['speed'] = 0
-        self.tasks[seq]['received'] = 0
-        self.tasks[seq]['last_report'] = time()
+    def init_task(self, seq, msg):
+        self.tasks[seq]['chat_msg_id'] = f'{msg.chat_id}/{msg.id}'
+        if msg.photo:
+            self.tasks[seq]['media_id'] = msg.photo.id
+            return f'photo: {self.tasks[seq]["chat_msg_id"]} | {msg.photo.id}'
+        else:
+            self.tasks[seq]['media_id'] = msg.document.id
+            self.tasks[seq]['name'] = msg.file.name
+            self.tasks[seq]['total'] = msg.document.size
+            self.tasks[seq]['speed'] = 0
+            self.tasks[seq]['received'] = 0
+            self.tasks[seq]['started'] = time()
+            media_str = f'document: {self.tasks[seq]["chat_msg_id"]} | {msg.document.id} | {msg.file.name}'
+            return media_str
 
     def make_progress_callback(self, seq):
         def progress_callback(received):
-            self.tasks[seq]['speed'] = \
-                (received - self.tasks[seq]['received']) / (time() - self.tasks[seq]['last_report'])
             self.tasks[seq]['received'] = received
-            self.tasks[seq]['last_report'] = time()
+            self.tasks[seq]['speed'] = received / (time() - self.tasks[seq]['started'])
             self.log_progress()
         return progress_callback
 
@@ -55,25 +62,27 @@ class ProgressSummary:
 
         task_table = []
         total_speed = 0
-        for task in self.tasks:
-            if task['name'] is None:
+        for i, task in enumerate(self.tasks):
+            if task['chat_msg_id'] is None:
                 continue
 
             total_speed += task['speed']
 
             name = task['name']
-            if len(name) > 64:
-                name = name[:50] + '...' + name[-10:]
+            if name and len(name) > 32:
+                name = name[:20] + '...' + name[-10:]
 
             task_table.append([
-                f'#{task["seq"]}',
+                f'#{i}',
+                task['chat_msg_id'],
+                task['media_id'],
                 name,
                 f'{format_bytes(task["received"])}/{format_bytes(task["total"])}',
                 f'{100*task["received"] / task["total"]:.1f}%',
                 f'{format_bytes(task["speed"])}/s',
             ])
 
-        task_table.append(['', 'Total:', '', '', f'{format_bytes(total_speed)}/s'])
+        task_table.append(['', 'Total:'] + ['']*4 +  [f'{format_bytes(total_speed)}/s'])
 
         logger.info('\n'+tabulate(task_table))
 
@@ -104,12 +113,12 @@ async def save_worker(seq, queue, progress_summary, client):
         try:
             logger.debug(f'Worker {seq} fetching next message, queue size: {queue.qsize()}')
             msg = await queue.get()
-            logger.info(f'Worker {seq} starting download {msg.chat_id}/{msg.id}')
+            media_str = progress_summary.init_task(seq, msg)
+            logger.info(f'Worker {seq} starting download {media_str}')
 
             if msg.photo:
                 tempfile = config['download']['incomplete'] / 'photos-by-id' / f'{msg.photo.id}.jpg'
                 file = config['download']['media'] / 'photos-by-id' / f'{msg.photo.id}.jpg'
-                progress_summary.tasks[seq]['name'] = f"{msg.chat_id}/{msg.id}.jpg"
 
                 await asyncio.wait_for(
                     client.download_media(message=msg, file=tempfile),
@@ -128,12 +137,6 @@ async def save_worker(seq, queue, progress_summary, client):
                     ext = '.bin'
                 tempfile = config['download']['incomplete'] / 'documents-by-id' / f'{msg.document.id}{ext}'
                 file = config['download']['media'] / 'documents-by-id' / f'{msg.document.id}{ext}'
-                progress_summary.tasks[seq]['name'] = f'{msg.chat_id}/{msg.document.id}{ext}'
-                name = f'{msg.chat_id}/{msg.document.id}{ext}'
-                if msg.file.name:
-                    name = f'{msg.chat_id}/{msg.file.name}'
-
-                progress_summary.init_task(seq, name, msg.document.size)
 
                 await download_with_timeout(client, msg, tempfile,
                                             progress_callback,
@@ -148,7 +151,7 @@ async def save_worker(seq, queue, progress_summary, client):
             else:
                 raise ValueError('Message does not contain a photo or document')
 
-            logger.info(f'Worker {seq} download finished {progress_summary.tasks[seq]["name"]}')
+            logger.info(f'Worker {seq} download finished {media_str}')
 
         except Exception:
             logger.error(f'Exception in worker {seq}: {traceback.format_exc()}')
