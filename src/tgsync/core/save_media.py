@@ -99,10 +99,10 @@ async def download_with_timeout(client, msg, file, progress_callback, timeout):
                 received += len(chunk)
                 progress_callback(received)
             except StopAsyncIteration:
-                break
+                return
             except asyncio.TimeoutError:
                 logger.error(f'Timeout occurred while downloading {msg.chat_id}/{msg.id}.')
-                break
+                raise
 
 
 async def save_worker(seq, queue, progress_summary, client):
