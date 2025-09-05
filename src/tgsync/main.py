@@ -21,14 +21,13 @@ async def process(client, chat_id):
     if 'range' in config['tg']['chats'][chat_id]:
         min_id, max_id = config['tg']['chats'][chat_id]['range']
 
-    chat_id = int(chat_id)
-
     logger.info('Syncing messages...')
-    await sync_chat(client, chat_id, min_id, max_id)
+    await sync_chat(client, int(chat_id), min_id, max_id)
 
-    logger.info(f'Saving media...')
-    await save_all(client, chat_id, True)
-    await save_all(client, chat_id, False)
+    if (not 'media' in config['tg']['chats'][chat_id]) or (config['tg']['chats'][chat_id]['media']):
+        logger.info(f'Saving media...')
+        await save_all(client, int(chat_id), True)
+        await save_all(client, int(chat_id), False)
 
     logger.info('Linking media to chat dir...')
     link_media()
@@ -54,12 +53,13 @@ async def main():
         logger.info('You can now restart the container in detached mode.')
         return
 
-    for chat_id in config['tg']['chats']:
-        await process(client, chat_id)
+    while True:
+        for chat_id in config['tg']['chats']:
+            await process(client, chat_id)
 
-    logger.info('All chats completed.')
-
-    await asyncio.Future()
+        logger.info('All chats completed.')
+        logger.info('Waiting for 300 seconds before the next run...')
+        await asyncio.sleep(300)
 
 
 if __name__ == '__main__':

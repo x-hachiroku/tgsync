@@ -1,5 +1,5 @@
 from sqlalchemy.orm import declarative_base
-from sqlalchemy import Column, Boolean, BigInteger, DateTime, String, ForeignKey
+from sqlalchemy import Column, Boolean, BigInteger, DateTime, String, Text, ForeignKey
 
 Base = declarative_base()
 
@@ -29,7 +29,7 @@ class MessageEntity(Base):
     sender_id = Column(BigInteger)
     date      = Column(DateTime)
     edit_date = Column(DateTime)
-    message   = Column(String(4096))
+    message   = Column(Text)
 
     reply_to_msg_id    = Column(BigInteger)
     reply_to_chat_id   = Column(BigInteger)

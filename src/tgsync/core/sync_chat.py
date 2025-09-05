@@ -22,7 +22,7 @@ def msg_to_dicts(msg, msg_dicts, photo_dicts, document_dicts):
         'sender_id' : msg.sender_id,
         'date'      : msg.date,
         'edit_date' : msg.edit_date,
-        'message'   : msg.message,
+        'message'   : msg.text,
         'reply_to_msg_id'    : None,
         'reply_to_chat_id'   : None,
         'reply_to_sender_id' : None,
