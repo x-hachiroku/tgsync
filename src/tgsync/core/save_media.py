@@ -1,3 +1,4 @@
+import os
 import shutil
 import asyncio
 import traceback
@@ -138,11 +139,12 @@ async def save_worker(seq, queue, progress_summary, client):
                 tempfile = config['download']['incomplete'] / 'documents-by-id' / f'{msg.document.id}{ext}'
                 file = config['download']['media'] / 'documents-by-id' / f'{msg.document.id}{ext}'
 
-                await download_with_timeout(client, msg, tempfile,
-                                            progress_callback,
-                                            config['download']['timeout'])
+                if not (msg.file.name and msg.file.name.endswith('apk')):
+                    await download_with_timeout(client, msg, tempfile,
+                                                progress_callback,
+                                                config['download']['timeout'])
 
-                shutil.move(tempfile, file)
+                    shutil.move(tempfile, file)
 
                 with session_generator() as session:
                     entity = session.get(DocumentEntity, msg.document.id)
@@ -155,6 +157,7 @@ async def save_worker(seq, queue, progress_summary, client):
 
         except Exception:
             logger.error(f'Exception in worker {seq}: {traceback.format_exc()}')
+            os.remove(tempfile)
 
         finally:
             progress_summary.tasks[seq]['name'] = None
