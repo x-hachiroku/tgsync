@@ -111,9 +111,12 @@ async def save_worker(seq, queue, progress_summary, client):
     progress_callback = progress_summary.make_progress_callback(seq)
 
     while True:
+        tempfile = None
         try:
             logger.debug(f'Worker {seq} fetching next message, queue size: {queue.qsize()}')
             msg = await queue.get()
+            if not msg:
+                continue
             media_str = progress_summary.init_task(seq, msg)
             logger.info(f'Worker {seq} starting download {media_str}')
 
@@ -140,9 +143,11 @@ async def save_worker(seq, queue, progress_summary, client):
                 file = config['download']['media'] / 'documents-by-id' / f'{msg.document.id}{ext}'
 
                 if not (msg.file.name and msg.file.name.endswith('apk')):
-                    await download_with_timeout(client, msg, tempfile,
-                                                progress_callback,
-                                                config['download']['timeout'])
+                    await download_with_timeout(
+                        client, msg, tempfile,
+                        progress_callback,
+                        config['download']['timeout']
+                    )
 
                     shutil.move(tempfile, file)
 
@@ -157,9 +162,10 @@ async def save_worker(seq, queue, progress_summary, client):
 
         except Exception:
             logger.error(f'Exception in worker {seq}: {traceback.format_exc()}')
-            os.remove(tempfile)
 
         finally:
+            if tempfile and os.path.exists(tempfile):
+                os.remove(tempfile)
             progress_summary.tasks[seq]['name'] = None
             queue.task_done()
 
@@ -176,14 +182,12 @@ async def save_all(client, chat_id, photo):
         target_entity = PhotoEntity
         target_col = PhotoEntity.id
         saved_col = PhotoEntity.saved
-        limit = config['tg']['message_limit']
     else:
         logger.info(f'Downloading documents from {chat_id}')
         target_id = MessageEntity.document_id
         target_entity = DocumentEntity
         target_col = DocumentEntity.id
         saved_col = DocumentEntity.saved
-        limit = config['download']['concurrent']
 
     subq = (
         select(
@@ -203,10 +207,10 @@ async def save_all(client, chat_id, photo):
         select(subq.c.id, subq.c.media_id)
         .where(subq.c.id > bindparam('min_id'))
         .order_by(subq.c.id)
-        .limit(limit)
+        .limit(config['download']['concurrent'] * 4)
     )
 
-    queue = asyncio.Queue(maxsize=(limit//2))
+    queue = asyncio.Queue(maxsize=(config['download']['concurrent']) * 4)
     progress_summary = ProgressSummary()
 
     workers = [asyncio.create_task(save_worker(i, queue, progress_summary, client))
@@ -226,7 +230,7 @@ async def save_all(client, chat_id, photo):
             msgs = await client.get_messages(
                 chat_id,
                 ids=msg_ids,
-                limit=config['tg']['message_limit'],
+                limit=config['download']['concurrent'] * 4
             )
 
             for msg in msgs:

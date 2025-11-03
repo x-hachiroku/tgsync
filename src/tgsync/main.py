@@ -49,9 +49,10 @@ async def main():
     client = await get_client()
 
     if setup:
-        await list_chats(client)
         logger.info('You can now restart the container in detached mode.')
         return
+
+    await list_chats(client)
 
     while True:
         for chat_id in config['tg']['chats']:

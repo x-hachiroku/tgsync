@@ -47,7 +47,7 @@ def link_media():
             chat_dir = config['download']['media'] / str(msg.chat_id)
             chat_dir.mkdir(parents=True, exist_ok=True)
 
-            dst = chat_dir / f'{msg.id}_{photo_id}.jpg'
+            dst = chat_dir / f'{msg.id:010d}_{photo_id}.jpg'
 
             logger.debug(f'Linking {photo_id} to {dst}')
             if os.path.exists(config['download']['media'] / 'photos-by-id' / f'{photo_id}.jpg'):
@@ -84,7 +84,7 @@ def link_media():
                 ext = '.bin'
             src = config['download']['media'] / 'documents-by-id' / f'{document_id}{ext}'
 
-            filename = f'{msg.id}'
+            filename = f'{msg.id:010d}'
             if document_name:
                 filename += f' {document_name}'
             else:
