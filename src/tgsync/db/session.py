@@ -7,7 +7,7 @@ from tgsync.logger import logger
 
 
 engine = create_engine(
-    url=config['db']['url'],
+    url=config.db.url,
     echo=False,
     pool_pre_ping=True,
     pool_size=20,

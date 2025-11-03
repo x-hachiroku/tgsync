@@ -6,7 +6,7 @@ from tgsync.logger import logger
 
 
 async def get_client():
-    proxy_url = config['tg'].get('proxy')
+    proxy_url = config.tg.proxy
     if proxy_url:
         components = urlparse(proxy_url)
         proxy = {
@@ -24,9 +24,9 @@ async def get_client():
         proxy = None
 
     client = TelegramClient(
-        appdata / config['tg']['session'],
-        config['tg']['api_id'],
-        config['tg']['api_hash'],
+        appdata / config.tg.session,
+        config.tg.api_id,
+        config.tg.api_hash,
         proxy=proxy,
     )
     await client.start()

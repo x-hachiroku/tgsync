@@ -1,5 +1,6 @@
 import re
 import os
+from datetime import timezone, timedelta
 from mimetypes import guess_extension
 
 from tgsync.config import config
@@ -23,13 +24,70 @@ def make_safe_filename(name):
         name = f'_{name}'
 
     encoded = name.encode('utf-8')
-    safe_name = encoded[:240] + encoded[-10:]
+    if len(encoded) > 250:
+        encoded = encoded[:240] + encoded[-10:]
     safe_name = encoded.decode('utf-8', errors='ignore')
 
     return safe_name
 
 
-def link_media():
+def get_channel_dir(chat_id, channel_name, channel_dirs):
+    if chat_id not in channel_dirs:
+        media_dir = config.download.media
+        channel_id = str(chat_id)
+        existing_dirs = sorted(
+            path for path in media_dir.iterdir()
+            if path.is_dir() and (path.name == channel_id or path.name.startswith(f'{channel_id} - '))
+        ) if media_dir.exists() else []
+
+        if existing_dirs:
+            channel_dirs[chat_id] = existing_dirs[0]
+        else:
+            channel_dir_name = channel_id
+            if channel_name is not None:
+                channel_dir_name = make_safe_filename(f'{channel_id} - {channel_name}')
+            channel_dirs[chat_id] = media_dir / channel_dir_name
+            channel_dirs[chat_id].mkdir(parents=True, exist_ok=True)
+
+    return channel_dirs[chat_id]
+
+
+def get_shard_dir(message_date, sharding):
+    if sharding is None:
+        return None
+
+    if message_date.tzinfo is None:
+        message_date = message_date.replace(tzinfo=timezone.utc)
+    local_date = message_date.astimezone().date()
+
+    if sharding == 'month':
+        local_date = local_date.replace(day=1)
+    elif sharding == 'week':
+        local_date -= timedelta(days=local_date.weekday())
+
+    return local_date.strftime('%Y%m%d')
+
+
+def get_media_dir(msg, channel_names, channel_dirs):
+    chat_config = config.tg.chats.get(str(msg.chat_id))
+    if chat_config is None:
+        return get_channel_dir(msg.chat_id, None, channel_dirs)
+
+    channel_name = channel_names.get(msg.chat_id, str(msg.chat_id))
+    chat_dir = get_channel_dir(msg.chat_id, channel_name, channel_dirs)
+    shard_dir = get_shard_dir(msg.date, chat_config.sharding)
+    if shard_dir is None:
+        return chat_dir
+
+    media_dir = chat_dir / shard_dir
+    media_dir.mkdir(parents=True, exist_ok=True)
+    return media_dir
+
+
+def link_media(chats):
+    channel_names = {int(chat_id): name for name, chat_id in chats.items()}
+    channel_dirs = {}
+
     with session_generator() as session:
         candidates = (
             session.query(
@@ -44,15 +102,14 @@ def link_media():
         ).all()
 
         for msg, photo_id in candidates:
-            chat_dir = config['download']['media'] / str(msg.chat_id)
-            chat_dir.mkdir(parents=True, exist_ok=True)
+            chat_dir = get_media_dir(msg, channel_names, channel_dirs)
 
-            dst = chat_dir / f'{msg.id}_{photo_id}.jpg'
+            dst = chat_dir / f'{msg.id:010d}_{photo_id}.jpg'
 
             logger.debug(f'Linking {photo_id} to {dst}')
-            if os.path.exists(config['download']['media'] / 'photos-by-id' / f'{photo_id}.jpg'):
+            if os.path.exists(config.download.media / 'photos-by-id' / f'{photo_id}.jpg'):
                 if not os.path.exists(dst):
-                    os.link(config['download']['media'] / 'photos-by-id' / f'{photo_id}.jpg', dst)
+                    os.link(config.download.media / 'photos-by-id' / f'{photo_id}.jpg', dst)
                 else:
                     logger.warning(f'File {dst} already exists, skipping...')
             else:
@@ -76,15 +133,14 @@ def link_media():
         ).all()
 
         for msg, document_id, document_name, document_type in candidates:
-            chat_dir = config['download']['media'] / str(msg.chat_id)
-            chat_dir.mkdir(parents=True, exist_ok=True)
+            chat_dir = get_media_dir(msg, channel_names, channel_dirs)
 
             ext = guess_extension(document_type)
             if ext is None:
                 ext = '.bin'
-            src = config['download']['media'] / 'documents-by-id' / f'{document_id}{ext}'
+            src = config.download.media / 'documents-by-id' / f'{document_id}{ext}'
 
-            filename = f'{msg.id}'
+            filename = f'{msg.id:010d}'
             if document_name:
                 filename += f' {document_name}'
             else:
@@ -105,4 +161,9 @@ def link_media():
 
 
 if __name__ == '__main__':
-    link_media()
+    import json
+
+    from tgsync.config import appdata
+
+    with open(appdata / 'chats.json', 'r', encoding='utf-8') as f:
+        link_media(json.load(f))

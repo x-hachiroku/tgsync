@@ -26,7 +26,7 @@ class ProgressSummary:
             'received': 0,
             'start_time': 0,
             'speed': 0,
-        } for _ in range(config['download']['concurrent'])]
+        } for _ in range(config.download.concurrent)]
 
     def init_task(self, seq, msg):
         self.tasks[seq]['chat_msg_id'] = f'{msg.chat_id}/{msg.id}'
@@ -57,7 +57,7 @@ class ProgressSummary:
                     return f'{b:.2f}{unit}'
                 b /= 1024
 
-        if time() - self.report_time < config['download']['summary_interval']:
+        if time() - self.report_time < config.download.summary_interval:
             return
         self.report_time = time()
 
@@ -111,19 +111,22 @@ async def save_worker(seq, queue, progress_summary, client):
     progress_callback = progress_summary.make_progress_callback(seq)
 
     while True:
+        tempfile = None
         try:
             logger.debug(f'Worker {seq} fetching next message, queue size: {queue.qsize()}')
             msg = await queue.get()
+            if not msg:
+                continue
             media_str = progress_summary.init_task(seq, msg)
             logger.info(f'Worker {seq} starting download {media_str}')
 
             if msg.photo:
-                tempfile = config['download']['incomplete'] / 'photos-by-id' / f'{msg.photo.id}.jpg'
-                file = config['download']['media'] / 'photos-by-id' / f'{msg.photo.id}.jpg'
+                tempfile = config.download.incomplete / 'photos-by-id' / f'{msg.photo.id}.jpg'
+                file = config.download.media / 'photos-by-id' / f'{msg.photo.id}.jpg'
 
                 await asyncio.wait_for(
                     client.download_media(message=msg, file=tempfile),
-                    timeout=config['download']['timeout']
+                    timeout=config.download.timeout
                 )
 
                 shutil.move(tempfile, file)
@@ -136,13 +139,15 @@ async def save_worker(seq, queue, progress_summary, client):
                 ext = guess_extension(msg.document.mime_type)
                 if ext is None:
                     ext = '.bin'
-                tempfile = config['download']['incomplete'] / 'documents-by-id' / f'{msg.document.id}{ext}'
-                file = config['download']['media'] / 'documents-by-id' / f'{msg.document.id}{ext}'
+                tempfile = config.download.incomplete / 'documents-by-id' / f'{msg.document.id}{ext}'
+                file = config.download.media / 'documents-by-id' / f'{msg.document.id}{ext}'
 
                 if not (msg.file.name and msg.file.name.endswith('apk')):
-                    await download_with_timeout(client, msg, tempfile,
-                                                progress_callback,
-                                                config['download']['timeout'])
+                    await download_with_timeout(
+                        client, msg, tempfile,
+                        progress_callback,
+                        config.download.timeout
+                    )
 
                     shutil.move(tempfile, file)
 
@@ -157,18 +162,19 @@ async def save_worker(seq, queue, progress_summary, client):
 
         except Exception:
             logger.error(f'Exception in worker {seq}: {traceback.format_exc()}')
-            os.remove(tempfile)
 
         finally:
             progress_summary.tasks[seq]['chat_msg_id'] = None
+            if tempfile and os.path.exists(tempfile):
+                os.remove(tempfile)
             queue.task_done()
 
 
 async def save_all(client, chat_id, photo):
-    (config['download']['incomplete'] / 'photos-by-id').mkdir(parents=True, exist_ok=True)
-    (config['download']['incomplete'] / 'documents-by-id').mkdir(parents=True, exist_ok=True)
-    (config['download']['media'] / 'photos-by-id').mkdir(parents=True, exist_ok=True)
-    (config['download']['media'] / 'documents-by-id').mkdir(parents=True, exist_ok=True)
+    (config.download.incomplete / 'photos-by-id').mkdir(parents=True, exist_ok=True)
+    (config.download.incomplete / 'documents-by-id').mkdir(parents=True, exist_ok=True)
+    (config.download.media / 'photos-by-id').mkdir(parents=True, exist_ok=True)
+    (config.download.media / 'documents-by-id').mkdir(parents=True, exist_ok=True)
 
     if photo:
         logger.info(f'Downloading photos from {chat_id}')
@@ -176,14 +182,12 @@ async def save_all(client, chat_id, photo):
         target_entity = PhotoEntity
         target_col = PhotoEntity.id
         saved_col = PhotoEntity.saved
-        limit = config['tg']['message_limit']
     else:
         logger.info(f'Downloading documents from {chat_id}')
         target_id = MessageEntity.document_id
         target_entity = DocumentEntity
         target_col = DocumentEntity.id
         saved_col = DocumentEntity.saved
-        limit = config['download']['concurrent']
 
     subq = (
         select(
@@ -203,14 +207,14 @@ async def save_all(client, chat_id, photo):
         select(subq.c.id, subq.c.media_id)
         .where(subq.c.id > bindparam('min_id'))
         .order_by(subq.c.id)
-        .limit(limit)
+        .limit(config.download.concurrent * 4)
     )
 
-    queue = asyncio.Queue(maxsize=(limit//2))
+    queue = asyncio.Queue(maxsize=config.download.concurrent * 4)
     progress_summary = ProgressSummary()
 
     workers = [asyncio.create_task(save_worker(i, queue, progress_summary, client))
-               for i in range(config['download']['concurrent'])]
+               for i in range(config.download.concurrent)]
 
 
     try:
@@ -226,7 +230,7 @@ async def save_all(client, chat_id, photo):
             msgs = await client.get_messages(
                 chat_id,
                 ids=msg_ids,
-                limit=config['tg']['message_limit'],
+                limit=config.download.concurrent * 4
             )
 
             for msg in msgs:

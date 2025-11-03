@@ -14,23 +14,26 @@ from tgsync.db.session import engine
 from tgsync.db.entities import Base
 
 
-async def process(client, chat_id):
+async def process(client, chat_id, chats):
     logger.info(f'Processing chat {chat_id}')
 
-    min_id, max_id = 0, 0
-    if 'range' in config['tg']['chats'][chat_id]:
-        min_id, max_id = config['tg']['chats'][chat_id]['range']
+    chat_config = config.tg.chats[chat_id]
+    min_id, max_id = chat_config.range
 
     logger.info('Syncing messages...')
-    await sync_chat(client, int(chat_id), min_id, max_id)
+    try:
+        await sync_chat(client, int(chat_id), min_id, max_id)
+    except:
+        logger.error(chat_id)
+        return
 
-    if (not 'media' in config['tg']['chats'][chat_id]) or (config['tg']['chats'][chat_id]['media']):
+    if chat_config.media:
         logger.info(f'Saving media...')
         await save_all(client, int(chat_id), True)
         await save_all(client, int(chat_id), False)
 
     logger.info('Linking media to chat dir...')
-    link_media()
+    link_media(chats)
 
     logger.info(f'Chat {chat_id} completed.')
 
@@ -42,20 +45,20 @@ async def main():
     parser.add_argument('-s', '--setup', action='store_true', help='Run setup')
     args = parser.parse_args()
 
-    setup = not os.path.exists(appdata / config['tg']['session']) or args.setup
+    setup = not os.path.exists(appdata / config.tg.session) or args.setup
     if setup:
         logger.warning('No session file found. Please run the container in interactive mode to login.')
 
     client = await get_client()
 
     if setup:
-        await list_chats(client)
         logger.info('You can now restart the container in detached mode.')
         return
 
     while True:
-        for chat_id in config['tg']['chats']:
-            await process(client, chat_id)
+        chats = await list_chats(client)
+        for chat_id in config.tg.chats:
+            await process(client, chat_id, chats)
 
         logger.info('All chats completed.')
         logger.info('Waiting for 300 seconds before the next run...')

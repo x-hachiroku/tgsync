@@ -74,7 +74,7 @@ async def sync_msgs(client, chat_id, min_id, max_id=0):
 
     return the last message id synced
     '''
-    logger.info(f'Fetching next {config["tg"]["message_limit"]} messages from {chat_id}/{min_id}')
+    logger.info(f'Fetching next {config.tg.message_limit} messages from {chat_id}/{min_id}')
     min_id = min_id-1
     max_id = 0 if max_id == 0 else max_id+1
 
@@ -87,7 +87,7 @@ async def sync_msgs(client, chat_id, min_id, max_id=0):
         reverse=True,
         min_id=min_id,
         max_id=max_id,
-        limit=config['tg']['message_limit'],
+        limit=config.tg.message_limit,
     )
     async for msg in msg_iter:
         if type(msg) is Message:

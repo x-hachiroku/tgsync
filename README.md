@@ -16,39 +16,7 @@ Synchronize Telegram messages and media to local storage.
    ```
 
 3. Configure the application:
-   - Copy `appdata/config.example.json` to `appdata/config.json`
-   - Edit `appdata/config.json`
-
-   ```js
-   {
-     "log": {
-       "level": "INFO",
-       "dir": null // Directory to store logs, null to disable logging to file
-     },
-     "db": {
-       "url": "postgresql+psycopg2://tgsync:tgsync@postgres:5432/tgsync"
-     },
-     "tg": {
-       "api_id": -1,   // See:
-       "api_hash": "", // https://core.telegram.org/api/obtaining_api_id
-       "session": "/appdata/tgsync-default.session",
-       "message_limit": 2000, // Number of messages to fetch in one request
-        "chats": {
-          "-10023333333": {}, // Key: Chat ID to sync, available at `/appdata/chats.json` after first login
-          "-10066666666": {
-            "range": [500, 0] // Sync range, 0 means no limit on that side, leave empty to sync all messages
-          }
-        }
-     },
-     "download": {
-       "media": "/media", // Downloaded media files
-       "incomplete": "/incomplete", //Temporary directory for incomplete downloads
-       "concurrent": 4, // Maximum number of concurrent media downloads
-       "timeout": 60, // Timeout in seconds for each chunk or a photo
-       "summary_interval": 30 // Interval in seconds to log progress summary
-     }
-   }
-   ```
+   - Copy `appdata/config.example.yaml` to `appdata/config.yaml` and make your changes.
 
 4. Start services:
    ```sh
@@ -61,8 +29,11 @@ Synchronize Telegram messages and media to local storage.
 The application implements an efficient storage system for media files:
 
 1. Original media files are stored in corresponding repos, `/media/{photo,documents}-by-id/`, with name `<media_id>.ext`
-2. Hard links are created to `/media/<chat_id>/` with name `<msg_id>_<photo_id>.ext` or `<msg_id> <original_filename>.ext`
-for any message containing that media
+2. Hard links are created to `/media/<chat_id> - <channel_name>/<shard_start_date>/` with name `<msg_id>_<photo_id>.ext` or
+  `<msg_id> <original_filename>.ext` for any message containing that media. The first existing directory matching the
+  channel ID is reused when a channel name changes.
+
+  - Shard dir marks the start date of a shard, calculated in local time.
 
 This ensures that duplicate media files are not downloaded multiple times, and no additional space is used while each
 chat maintains its own organized media directory.
@@ -72,7 +43,7 @@ chat maintains its own organized media directory.
 
 To delete a specific media file from repo and all chat dirs:
 ```sh
-find /media -samefile "<awful_media_from_repo_or_chat_dir>" -delete
+find /media -samefile "<awful_media>" -delete
 ```
 
 To clean up orphaned media files (those no longer referenced by any chat) in repos:
@@ -82,4 +53,4 @@ find /media/{photo,documents}-by-id/ -links 1 -delete
 
 **NOTE**: Once a media file is deleted from the repo, it will not be re-downloaded even when referenced by new messages.
 
-For more information about hard links, visit [Wikipedia](https://en.wikipedia.org/wiki/Hard_link).
+For more information about hard links, see [Wikipedia](https://en.wikipedia.org/wiki/Hard_link).

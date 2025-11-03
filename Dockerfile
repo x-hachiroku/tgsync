@@ -1,15 +1,14 @@
-FROM python:3.12-slim
+FROM docker.io/library/python:3.14
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt ./
-RUN pip install --upgrade pip && pip install -r requirements.txt
-
+# Install the project and its dependencies from pyproject.toml.
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
+RUN pip install --upgrade pip && pip install .
 
 ENV PYTHONPATH="/app/src"
 
