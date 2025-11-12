@@ -160,7 +160,7 @@ async def save_worker(seq, queue, progress_summary, client):
             os.remove(tempfile)
 
         finally:
-            progress_summary.tasks[seq]['name'] = None
+            progress_summary.tasks[seq]['chat_msg_id'] = None
             queue.task_done()
 
 
