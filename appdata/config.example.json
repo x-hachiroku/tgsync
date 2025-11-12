@@ -11,12 +11,14 @@
     "api_hash": "",
     "session": "/appdata/tgsync-default.session",
     "message_limit": 2000,
-     "chats": {
-       "-10023333333": {},
-       "-10066666666": {
-         "range": [500, 0]
-       }
-     }
+    "proxy": "socks5h://user:pass@localhost:9000",
+    "chats": {
+      "-10023333333": {},
+      "-10066666666": {
+        "media": true,
+        "range": [500, 0]
+      }
+    }
   },
   "download": {
     "media": "/media",
