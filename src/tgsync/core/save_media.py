@@ -4,6 +4,8 @@ import asyncio
 import traceback
 from time import time
 from mimetypes import guess_extension
+
+from blake3 import blake3
 from tabulate import tabulate
 
 from sqlalchemy import select, bindparam
@@ -13,6 +15,50 @@ from tgsync.logger import logger
 from tgsync.core.get_client import get_client
 from tgsync.db.session import session_generator
 from tgsync.db.entities import MessageEntity, PhotoEntity, DocumentEntity
+
+
+def document_file(document_id, document_type):
+    ext = guess_extension(document_type)
+    if ext is None:
+        ext = '.bin'
+    return config.download.media / 'documents-by-id' / f'{document_id}{ext}'
+
+
+def file_blake3(file):
+    digest = blake3()
+    digest.update_mmap(file)
+    return digest.digest()
+
+
+def save_document(document_id, document_type, file):
+    digest = file_blake3(file)
+
+    with session_generator() as session:
+        entity = session.get(DocumentEntity, document_id)
+        duplicate = (
+            session.query(DocumentEntity)
+            .filter(
+                DocumentEntity.id != document_id,
+                DocumentEntity.blake3 == digest,
+            )
+            .first()
+        )
+
+        if duplicate:
+            duplicate_file = document_file(duplicate.id, duplicate.type)
+            if duplicate_file.exists():
+                os.remove(file)
+                os.link(duplicate_file, file)
+                logger.info(f'Hard linked duplicate document {document_id} to {duplicate.id}')
+            else:
+                logger.warning(
+                    f'Duplicate document {duplicate.id} for {document_id} is missing from the repository; '
+                    f'removing {file}'
+                )
+                os.remove(file)
+
+        entity.blake3 = digest
+        entity.saved = True
 
 
 class ProgressSummary:
@@ -136,11 +182,9 @@ async def save_worker(seq, queue, progress_summary, client):
                     entity.saved = True
 
             elif msg.document:
-                ext = guess_extension(msg.document.mime_type)
-                if ext is None:
-                    ext = '.bin'
+                ext = guess_extension(msg.document.mime_type) or '.bin'
                 tempfile = config.download.incomplete / 'documents-by-id' / f'{msg.document.id}{ext}'
-                file = config.download.media / 'documents-by-id' / f'{msg.document.id}{ext}'
+                file = document_file(msg.document.id, msg.document.mime_type)
 
                 if not (msg.file.name and msg.file.name.endswith('apk')):
                     await download_with_timeout(
@@ -151,9 +195,11 @@ async def save_worker(seq, queue, progress_summary, client):
 
                     shutil.move(tempfile, file)
 
-                with session_generator() as session:
-                    entity = session.get(DocumentEntity, msg.document.id)
-                    entity.saved = True
+                    save_document(msg.document.id, msg.document.mime_type, file)
+                else:
+                    with session_generator() as session:
+                        entity = session.get(DocumentEntity, msg.document.id)
+                        entity.saved = True
 
             else:
                 raise ValueError('Message does not contain a photo or document')

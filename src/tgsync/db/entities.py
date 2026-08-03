@@ -1,5 +1,5 @@
 from sqlalchemy.orm import declarative_base
-from sqlalchemy import Column, Boolean, BigInteger, DateTime, String, Text, ForeignKey
+from sqlalchemy import Column, Boolean, BigInteger, DateTime, String, Text, ForeignKey, LargeBinary
 
 Base = declarative_base()
 
@@ -15,6 +15,7 @@ class DocumentEntity(Base):
     __tablename__ = 'document'
 
     id      = Column(BigInteger, primary_key=True)
+    blake3  = Column(LargeBinary(32), index=True)
     type    = Column(String(255))
     size    = Column(BigInteger)
     name    = Column(String(255))
