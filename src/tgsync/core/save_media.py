@@ -253,10 +253,10 @@ async def save_all(client, chat_id, photo):
         select(subq.c.id, subq.c.media_id)
         .where(subq.c.id > bindparam('min_id'))
         .order_by(subq.c.id)
-        .limit(config.download.concurrent * 4)
+        .limit(config.download.concurrent)
     )
 
-    queue = asyncio.Queue(maxsize=config.download.concurrent * 4)
+    queue = asyncio.Queue(maxsize=config.download.concurrent)
     progress_summary = ProgressSummary()
 
     workers = [asyncio.create_task(save_worker(i, queue, progress_summary, client))
@@ -276,7 +276,7 @@ async def save_all(client, chat_id, photo):
             msgs = await client.get_messages(
                 chat_id,
                 ids=msg_ids,
-                limit=config.download.concurrent * 4
+                limit=config.download.concurrent
             )
 
             for msg in msgs:
