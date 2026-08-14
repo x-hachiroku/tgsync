@@ -3,4 +3,4 @@ incomplete/
 postgres/
 
 appdata/*
-!appdata/config.example.json
+!appdata/config.example.yaml

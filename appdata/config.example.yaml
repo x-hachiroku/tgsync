@@ -1,0 +1,29 @@
+{
+  "log": {
+    "level": "INFO",
+    "dir": null # Directory to store logs, null to disable logging to file
+  },
+  "db": {
+    "url": "postgresql+psycopg2://tgsync:tgsync@postgres:5432/tgsync"
+  },
+  "tg": {
+    "api_id": -1,   # See https://core.telegram.org/api/obtaining_api_id
+    "api_hash": "",
+    "session": "/appdata/tgsync-default.session",
+    "message_limit": 2000, # Number of messages to fetch in one request
+    "chats": {
+      "-10023333333": {}, # Key: Chat ID to sync, available at `/appdata/chats.json` after first login
+      "-10066666666": {
+        "range": [500, 0], # Sync range, 0 means no limit on that side, leave empty to sync all messages
+        "sharding": "day", # Optional, "month", "week", or "day" to group media by date in local time, or null to disable.
+      }
+    }
+  },
+  "download": {
+    "media": "/media", # Downloaded media files
+    "incomplete": "/incomplete", #Temporary directory for incomplete downloads
+    "concurrent": 4, # Maximum number of concurrent media downloads
+    "timeout": 60, # Timeout in seconds for each chunk or a photo
+    "summary_interval": 30, # Interval in seconds to log progress summary
+  }
+}
