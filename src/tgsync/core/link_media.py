@@ -10,8 +10,14 @@ from tgsync.db.entities import MessageEntity, PhotoEntity, DocumentEntity
 
 
 def make_safe_filename(name):
-    invalid_chars = r'[\\/:*?"<>|]'
-    name = re.sub(invalid_chars, '_', name)
+    invalit_table = {
+        '/': '／', '\\': '＼', '?': '？', '!': '！', '"': "'",
+        '<': '＜', '>': '＞', '|': '｜', ':': '：', '*': '＊',
+    }
+    invalid_chars = ''.join(invalit_table.keys())
+    invalid_pattern = re.compile(f'[{re.escape(invalid_chars)}]')
+
+    name = invalid_pattern.sub(lambda m: invalit_table[m.group(0)], name)
 
     name = name.strip(' .')
 
@@ -25,7 +31,7 @@ def make_safe_filename(name):
 
     encoded = name.encode('utf-8')
     if len(encoded) > 250:
-        encoded = encoded[:240] + encoded[-10:]
+        encoded = encoded[:230] + encoded[-20:]
     safe_name = encoded.decode('utf-8', errors='ignore')
 
     return safe_name
