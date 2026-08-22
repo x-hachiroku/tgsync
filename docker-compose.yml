@@ -17,8 +17,7 @@ services:
       POSTGRES_DB: 'tgsync'
 
   tgsync:
-    image: 'tgsync:dev'
-    build: '.'
+    image: 'ghcr.io/x-hachiroku/tgsync:master'
     container_name: 'tgsync'
     restart: 'unless-stopped'
 

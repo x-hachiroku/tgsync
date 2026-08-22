@@ -5,7 +5,7 @@ Synchronize Telegram messages and media to local storage.
 
 ## Quick Start
 
-1. Clone this repo, configure `docker-compose.yaml`.
+1. Configure `docker-compose.yaml`.
     * `/appdata`: Configuration files, session data, and logs
 
 2. Start the container in interactive mode to login:
